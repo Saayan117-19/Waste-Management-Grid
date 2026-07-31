@@ -111,11 +111,63 @@ NYC DSNY Monthly Tonnage Data + NYC Community Districts boundaries (real municip
   - Runtime: 45.5 sec for n=10.
   - Empirical growth proof: n=4→10 runtime went from 0.0001s → 50.98s. n=9→10 alone was a ~12x jump. Directly validates O(n²·2ⁿ) complexity claim with real data, not just theory.
 
-**Not yet done:**
-- Genetic Algorithm (full 59-district problem).
-- 2-opt improvement on NN route.
-- Route comparison table (distance, time, fuel, computational complexity, % improvement over naive).
-- Possibly: Clarke-Wright/VRP extension for multi-truck realism.
+- **Genetic Algorithm (full 59-district problem):**
+  - **First attempt (pure random-start GA, pop=100, gen=300):** converged smoothly (healthy convergence curve) but to a WORSE result than Nearest Neighbor — 297.98 km vs NN's 238.86 km (-24.7%, i.e. actually worse). Root cause: pure random initialization + insufficient population diversity/generations for a 59-node search space, causing premature convergence to a mediocre local optimum. **Kept as a documented negative result** for the report — demonstrates GA's sensitivity to initialization/hyperparameters, a legitimate DAA talking point.
+  - **Fixed version (v2):** seeded initial population with the Nearest Neighbor route + mutated variants of it (instead of 100% random individuals), increased pop_size 100→200 and generations 300→500, and added a **2-opt local refinement pass** on the GA's best result before finalizing.
+  - **Result: 218.55 km, 11.15 sec runtime, 8.5% improvement over Nearest Neighbor.** Convergence curve confirms clean convergence (flat by ~generation 130, not still searching at 500). Map shows visibly cleaner route structure vs NN's tangled backtracking (especially the Staten Island loop).
+  - Improvement is modest, not dramatic — expected and stated honestly in report: 2-opt refinement already cleans up most of NN's worst mistakes, so GA's remaining improvement margin is naturally smaller than a from-scratch comparison would suggest.
+
+**Final Stage 4 comparison table:**
+| Algorithm | Scope | Distance (km) | Runtime (sec) | Complexity | Est. Travel Time (hrs) | Est. Fuel (L) |
+|---|---|---|---|---|---|---|
+| Nearest Neighbor (Naive) | All 59 districts | 238.86 | 0.0007 | O(n²) | 9.55 | 95.54 |
+| Genetic Algorithm + 2-opt | All 59 districts | 218.55 | 11.15 | O(pop×gen×n) | 8.74 | 87.42 |
+| Held-Karp (Exact) | Top 10 hotspots only | 101.96 | 45.46 | O(n²·2ⁿ) | 4.08 | 40.78 |
+
+Assumptions stated: avg speed 25 km/h, fuel rate 0.4 L/km (typical urban waste truck estimates — cite as assumptions, not measured data).
+
+**Savings from GA+2-opt vs Naive NN (full 59-district run):** 20.31 km saved (8.5%), ~8.13 L fuel saved, ~0.81 hours saved per collection run.
+
+**Output:** `route_nearest_neighbor.png`, `heldkarp_runtime_growth.png`, `ga_convergence.png`, `route_genetic_algorithm.png`, `route_comparison.csv`
+
+**Not yet done (optional extensions):**
+- Sensitivity analysis on GA hyperparameters (population size, mutation rate) for extra report depth.
+
+---
+
+## Stage 4 Extension — Real Road Routing + Multi-Truck VRP
+
+**Motivation:** Original routing used haversine (straight-line) distance, which cuts through water/buildings unrealistically and doesn't reflect real bridge/tunnel infrastructure. Also, single-vehicle TSP framing doesn't reflect how a real city actually collects waste (multiple trucks, capacity limits).
+
+**What we did:**
+
+**1. Switched to real road-network distances via OSRM (public routing API):**
+- Built a 59×59 real road distance matrix using OSRM's `/table` endpoint (free public server, driving profile).
+- Result: **road distance averages 1.35x longer than haversine** (20.01 km vs 14.92 km avg) — confirms real infrastructure constraints matter. Scatter plot comparison saved as evidence.
+- Re-ran Nearest Neighbor and GA+2-opt on real road distances: NN = 330.53 km, GA+2-opt = 315.79 km (9.97 sec runtime).
+- Fetched actual road-following polyline geometry via OSRM's `/route` endpoint and plotted it — route now visibly threads through real bridges/tunnels (e.g. Verrazzano Bridge into Staten Island) instead of straight lines over water. This was a specific ask from the project owner — solved naturally as a side effect of switching to real road routing, since a road-network path is physically forced through actual bridge locations.
+
+**2. Implemented Clarke-Wright Savings Algorithm (capacitated multi-truck VRP):**
+- Classic greedy-merge heuristic: starts with one truck per district, iteratively merges routes with the highest "savings" score, subject to a capacity constraint.
+- **First attempt used truck capacity = 8000 tons — too close to individual district demand (mean ~5,287 tons/district), leaving almost no room to merge routes.** Result: 46 trucks, mostly single-stop round trips, 1677 km total. Documented as a lesson in capacity-parameter sensitivity, not a bug.
+- **Corrected: capacity raised to 25,000 tons** (~3-4x average district demand) to allow genuine consolidation. Result: **14 trucks, 653.12 km total distance, most trucks running near-full (22,000-24,700 tons out of 25,000 capacity)** — a well-utilized, realistic-looking solution.
+- Fetched real road-following geometry for all 14 truck routes individually via OSRM (one request per truck) and plotted each in a distinct color — final map shows geographically coherent truck zones following real streets.
+
+**Honesty note for report:** truck capacity here is illustrative (monthly tonnage treated as a single VRP solve) rather than a literal single-trip truck capacity (~8-20 tons in reality); a real deployment would calibrate this against actual per-trip capacity and split monthly tonnage across many trips.
+
+**Final comparison table (Stage 4 complete):**
+| Approach | Vehicles | Scope | Distance (km) | Runtime (sec) | Complexity | Fuel (L) | Travel Time (hrs, per vehicle) |
+|---|---|---|---|---|---|---|---|
+| Nearest Neighbor (Naive, real roads) | 1 | All 59 | 330.53 | ~0 | O(n²) | 132.21 | 13.22 |
+| Genetic Algorithm + 2-opt (real roads) | 1 | All 59 | 315.79 | 9.97 | O(pop×gen×n) | 126.32 | 12.63 |
+| Held-Karp (Exact, haversine) | 1 | Top 10 hotspots | 101.96 | 45.46 | O(n²·2ⁿ) | 40.78 | 4.08 |
+| **Clarke-Wright VRP (real roads, multi-truck)** | **14** | **All 59** | **653.12** | **0.004** | **O(n² log n)** | **261.25** | **1.87 (avg per truck)** |
+
+**Key operational insight:** VRP's total distance (653 km) is higher than single-vehicle routes because it's summed across 14 trucks, but per-truck distance (~46.6 km) and per-truck time (~1.87 hrs) are dramatically lower than a single truck attempting the full city (12.6+ hrs) — this is the real-world payoff of multi-vehicle routing: parallelized, faster completion, even though aggregate distance is higher.
+
+**Output:** `road_vs_haversine_comparison.png`, `route_real_roads.png`, `route_vrp_clarke_wright.png` (straight-line version), `route_vrp_real_roads.png` (final, road-following, one color per truck), `final_route_comparison.csv`, `vrp_truck_summary.csv`
+
+**Stage 4 fully complete.**
 
 ---
 
@@ -144,15 +196,20 @@ NYC DSNY Monthly Tonnage Data + NYC Community Districts boundaries (real municip
 - DBSCAN: `eps=0.8, min_samples=3` — outlier flag for hotspots
 - `land_use_category` — rule-based: waste tier (PREDICTED) × volatility (HISTORICAL, threshold cv<0.20)
 
-## Routing / Stage 4 (in progress)
-- Distance metric: haversine (km), from district centroids
-- Algorithms implemented so far: Nearest Neighbor, Held-Karp (exact, subset only)
-- Algorithms planned: Genetic Algorithm, 2-opt, possibly Clarke-Wright/VRP
+## Routing / Stage 4
+- Distance metrics: haversine (km, initial/Held-Karp benchmark) AND real road-network distance via OSRM public API (final, used for all reported single/multi-vehicle results)
+- Algorithms implemented: Nearest Neighbor (naive baseline), Held-Karp (exact, top-10 hotspot subset only, haversine), Genetic Algorithm (NN-seeded, pop=200, gen=500, tournament selection, ordered crossover, swap mutation) + 2-opt local refinement, Clarke-Wright Savings Algorithm (capacitated multi-truck VRP)
+- Cost assumptions: avg speed 25 km/h, fuel rate 0.4 L/km, VRP truck capacity 25,000 tons (illustrative, see honesty note)
+- Real road route geometry fetched via OSRM `/route` endpoint — visibly shows bridges/tunnels (e.g. Verrazzano Bridge) instead of straight lines over water
 
 ---
 
 # Open Decisions / Things to Revisit
-- [ ] Confirm final GA parameters (population size, generations, mutation rate) once implemented — needs a sensitivity analysis for report depth.
-- [ ] Decide whether to add a multi-truck VRP extension (Clarke-Wright or OR-Tools) — currently single-vehicle TSP framing only.
+- [x] GA parameters finalized: pop=200, gen=500, NN-seeded, +2-opt refinement.
+- [x] Real road distances (OSRM) implemented, replacing haversine for final results — also solves "show bridges" request.
+- [x] Multi-truck VRP (Clarke-Wright) implemented — 14 trucks, 653 km total, real road geometry per truck.
+- [ ] Optional: sensitivity analysis on GA hyperparameters (population size, mutation rate) for extra report depth — nice-to-have.
+- [ ] VRP truck capacity (25,000 tons) is illustrative, not a literal per-trip capacity — documented as a limitation; could be refined by rescaling monthly demand to per-trip demand for a more literal VRP framing.
 - [ ] Land-use category thresholds (cv < 0.20) are fixed/arbitrary — worth a one-line sensitivity note in report.
 - [ ] Consider whether "Institutional" and "Market Area" categories (n=1–2 districts) should be merged or kept separate given small sample size.
+- [ ] Stage 5 (dashboard) not started yet.

@@ -1,5 +1,5 @@
 Approach,Vehicles,Scope,Total Distance (km),Runtime (sec),Time Complexity,Est. Fuel (Liters),"Est. Travel Time (hrs, per vehicle avg)"
 "Nearest Neighbor (Naive, real roads)",1,All 59 districts,330.5345000000001,,O(n²),132.21380000000005,13.221380000000003
-Genetic Algorithm + 2-opt (real roads),1,All 59 districts,315.7945000000001,9.971550226211548,O(pop×gen×n),126.31780000000003,12.631780000000003
-"Held-Karp (Exact, n=10 subset, haversine)",1,Top 10 hotspot districts only,101.96200938444962,45.457456827163696,O(n²·2ⁿ),40.78480375377985,4.078480375377985
-"Clarke-Wright VRP (real roads, multi-truck)",14,All 59 districts,653.1157,0.003749370574951172,O(n² log n),261.24628,1.866044857142857
+Genetic Algorithm + 2-opt (real roads),1,All 59 districts,315.7945000000001,11.664310932159424,O(pop×gen×n),126.31780000000003,12.631780000000003
+"Held-Karp (Exact, n=10 subset, haversine)",1,Top 10 hotspot districts only,101.96200938444962,47.22033905982971,O(n²·2ⁿ),40.78480375377985,4.078480375377985
+"Clarke-Wright VRP (real roads, multi-truck)",14,All 59 districts,653.1157,0.002616405487060547,O(n² log n),261.24628,1.866044857142857
