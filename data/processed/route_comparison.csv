@@ -1,0 +1,4 @@
+Algorithm,Scope,Total Distance (km),Runtime (sec),Time Complexity,Est. Travel Time (hrs),Est. Fuel (Liters)
+Nearest Neighbor (Naive),All 59 districts,238.86160365466196,0.0006620883941650391,O(n²),9.55446414618648,95.54464146186479
+Genetic Algorithm + 2-opt,All 59 districts,218.54687151150117,11.148768663406372,O(pop × gen × n),8.741874860460047,87.41874860460047
+"Held-Karp (Exact, n=10 subset)",Top 10 hotspot districts only,101.96200938444962,45.457456827163696,O(n² × 2ⁿ),4.078480375377985,40.78480375377985
